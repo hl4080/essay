@@ -24,8 +24,9 @@ const (
 )
 
 type Pool struct {
-	req chan interface{}	//待处理的请求
-	number int	//协程池的大小
+	req 	chan interface{}	//待处理的请求
+	done	chan bool			//完成标志
+	number 	int					//协程池的大小
 }
 
 func main() {
@@ -159,6 +160,7 @@ func SockaddrToAddr(sa syscall.Sockaddr) (syscall.SockaddrInet4, error) {
 
 func (p *Pool) Init(num int) {
 	p.req = make(chan interface{}, MaxRequestNum)
+	p.done = make(chan bool, num)
 	p.number = num
 }
 
@@ -167,14 +169,16 @@ func (p *Pool) start() {
 		go func(id int) {
 			fmt.Printf("worker %d started!\n", id)
 			for {
-				t, ok := <-p.req
-				if !ok {
+				select {
+				case t := <-p.req:
+					err := download(t.(string))
+					if err != nil {
+						fmt.Println(err)
+					}
+					p.done <- true
+				case <-p.done:
 					fmt.Printf("worker %d stopped!\n", id)
 					return
-				}
-				err := download(t.(string))
-				if err != nil {
-					fmt.Println(err)
 				}
 			}
 		}(i)
